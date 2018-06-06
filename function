@@ -1,0 +1,79 @@
+#!/bin/bash
+basepath=$(cd `dirname $0`; pwd)
+. $basepath/config
+docker_install () {
+    for node in $docker_nodes
+    do
+    ip a | grep -w $node
+    if [ $? -eq 0 ];then
+       yum -y install docker
+       systemctl stop firewalld
+       systemctl restart docker
+    else
+       ssh root@$node "yum -y install docker"
+       ssh root@$node "systemctl stop firewalld"
+       ssh root@$node "systemctl restart docker"
+    fi
+    done
+}
+mysql_mha_first_install () {
+   for node in $mysql_master_nodes
+   do
+      mysql_master_path="$basepath/mysql-master.tar.gz"
+      mysql_env_file="$basepath/mysql-mha-docker/parameters.env"
+      mysql_image="$basepath/mysql-mha-docker/docker-compose.yml"
+      mysql_slave_path="$basepath/mysql-slave.tar.gz"
+      docker_compose_path="$basepath/mysql-mha-docker/docker-compose.yml"
+      docker_compose_script_first="$basepath/mysql-mha-docker/volumes/mha_share/scripts/mysql_start_first.sh"
+      docker_compose_script_second="$basepath/mysql-mha-docker/volumes/mha_share/scripts/mysql_start_second.sh"
+      docker_compose_script_three="$basepath/mysql-mha-docker/volumes/mha_share/scripts/mysql_start_three.sh"
+      docker_compose_script_four="$basepath/mysql-mha-docker/volumes/mha_share/scripts/mysql_start_four.sh"
+      ip a |grep -w $node
+      if [ $? -eq 0 ];then
+          tar -xf $mysql_master_path -C $basepath
+          cd $basepath/mysql-mha-docker/
+          mv docker-compose /usr/local/bin/
+          sed -i s"#MYSQL_ROOT_PASSWORD.*#MYSQL_ROOT_PASSWORD=$mysql_password#" $mysql_env_file
+          sed -i s"#image.*#image: $docker_image#" $docker_compose_path
+          sed -i s"#wang.*#wang@$mysql_first identified by 'wang@123';#" $docker_compose_script_first
+          sed -i s"#wang.*#wang@$mysql_first identified by 'wang@123';#" $docker_compose_script_three
+          sed -i s"#master_host=.*#master_host=$mysql_slave,master_port=33060,master_user='wang',master_password='wang@123',master_log_file='mysql-bin.000003',master_log_pos=611;#" $docker_compose_script_second
+          sed -i s"#master_host=.*#master_host=$mysql_master,master_port=33060,master_user='wang',master_password='wang@123',master_log_file='mysql-bin.000003',master_log_pos=611;#" $docker_compose_script_four
+          bash +x $basepath/mysql-mha-docker/scripts/mysql-del.sh
+          cd $basepath/mysql-mha-docker/ && docker-compose up -d
+            
+      else
+          ssh root@$node  "mkdir $basepath"
+          scp $docker_compose_path root@$node:$docker_compose_path
+          scp $mysql_env_file root@$node:$mysql_env_file
+          scp $mysql_slave_path root@$node:$basepath/
+          ssh root@$node "tar -xf $mysql_slave_path -C $basepath"
+          scp $docker_compose_script_three root@$node:$docker_compose_script_first
+          scp $docker_compose_script_four root@$node:$docker_compose_script_second
+          ssh root@$node "cd $basepath/mysql-mha-docker/ && mv docker-compose /usr/local/bin/"
+          ssh root@$node "cd $basepath/mysql-mha-docker/ && docker-compose up -d"
+      fi
+   done
+}             
+mysql_second_install () {
+    for node in $mysql_master_nodes
+    do 
+      ip a |grep -w $node
+      if [ $? -eq 0 ];then 
+         docker exec -it mha_node2 /bin/bash $basepath/mha_share/scripts/mysql_start_first.sh
+      else
+         ssh root@$node "docker exec -it mha_node2 /bin/bash $basepath/mha_share/scripts/mysql_start_first.sh"      
+      fi
+   done
+}
+mysql_three_install () {
+    for node in $mysql_master_nodes
+    do 
+      ip a |grep -w $node
+      if [ $? -eq 0 ];then 
+         docker exec -it mha_node2 /bin/bash $basepath/mha_share/scripts/mysql_start_second.sh
+      else
+         ssh root@$node "docker exec -it mha_node2 /bin/bash $basepath/mha_share/scripts/mysql_start_second.sh"      
+      fi
+   done
+}

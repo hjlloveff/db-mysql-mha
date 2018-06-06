@@ -1,0 +1,17 @@
+password='123456'
+all_nodes='192.168.186.4 192.168.186.5'
+#################
+docker_nodes='192.168.186.4 192.168.186.5'
+mysql_master_nodes='192.168.186.4 192.168.186.5'
+####################docker-compose.config####
+#网卡名称 默认是ens33###
+####网段 默认和宿主机是一样的##
+###gateway 默认和宿主机是一样的##
+######mysql-master docker 地址###
+#########mysql权限网段#####
+mysql_first="'192.168.186.%'"
+#########授权ip#####·
+mysql_slave="'192.168.186.5'"
+mysql_master="'192.168.186.4'"
+mysql_password='hqhy2016'
+docker_image='hejunlu/mha4mysql-node'
